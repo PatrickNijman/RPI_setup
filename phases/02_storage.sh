@@ -1,8 +1,17 @@
 #!/bin/bash
 source lib/common.sh
+source ./config.env
 
-DISK=$(lsblk -dpno NAME | grep -v mmcblk | grep -v loop | head -n1)
-[ -z "$DISK" ] && error "No external disk found"
+ROOT_DISK=$(lsblk -no PKNAME $(findmnt -n -o SOURCE /) | head -n1)
+ROOT_DISK="/dev/$ROOT_DISK"
+
+info "Root disk detected as $ROOT_DISK"
+
+DISK=$(lsblk -dpno NAME | grep -v "$ROOT_DISK" | grep -v loop | head -n1)
+
+[ -z "$DISK" ] && error "No suitable external disk found"
+
+info "Backup disk candidate: $DISK"
 
 info "Preparing disk $DISK"
 
