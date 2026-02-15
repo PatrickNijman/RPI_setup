@@ -26,6 +26,9 @@ for VOL in $PIHOLE_VOLUME $DNSMASQ_VOLUME; do
         info "Creating Docker volume: $VOL"
         run "docker volume create $VOL"
     fi
+    # ensure the volume is writable by container processes (set permissive perms)
+    info "Ensuring permissions for Docker volume: $VOL"
+    run "docker run --rm -v $VOL:/data alpine sh -c 'chmod -R 0775 /data || true'"
 done
 
 # Pull latest Pi-hole image
@@ -46,6 +49,20 @@ fi
 # Start container if missing
 if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
     info "Starting Pi-hole container"
+    # ensure port 53 is available (stop common host services that bind it)
+    if systemctl is-active --quiet systemd-resolved; then
+        warn "systemd-resolved is active and may bind port 53; disabling it"
+        run "systemctl disable --now systemd-resolved.service"
+    fi
+    if systemctl is-active --quiet dnsmasq; then
+        warn "dnsmasq service is active and may bind port 53; disabling it"
+        run "systemctl disable --now dnsmasq.service"
+    fi
+
+    if ss -lupn | grep -q ':53'; then
+        error "Port 53 still in use on the host; resolve conflict before starting Pi-hole"
+    fi
+
     run "docker run -d \
         --name pihole \
         --restart unless-stopped \
@@ -70,3 +87,6 @@ else
 fi
 
 info "Pi-hole phase complete"
+
+# Run validation to confirm Docker + Pi-hole readiness
+run "bash scripts/validate-docker-pihole.sh"

@@ -21,6 +21,12 @@ run "mkdir -p /srv/immich/{library,postgres,cache}"
 run "mkdir -p /opt/containers"
 
 info "Setting ownership to primary user"
-run "chown -R $PRIMARY_USER:$PRIMARY_USER /srv /opt/containers"
+if id -u "$PRIMARY_USER" >/dev/null 2>&1; then
+	run "chown -R $PRIMARY_USER:$PRIMARY_USER /srv /opt/containers"
+else
+	warn "Primary user $PRIMARY_USER does not exist; creating"
+	run "useradd -m -s /bin/bash $PRIMARY_USER"
+	run "chown -R $PRIMARY_USER:$PRIMARY_USER /srv /opt/containers"
+fi
 
 info "Base phase complete"

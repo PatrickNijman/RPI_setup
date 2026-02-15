@@ -30,4 +30,18 @@ fi
 info "Enabling Docker service"
 run "systemctl enable --now docker"
 
+# Ensure primary user can use Docker (requires re-login to take effect)
+if id -u "$PRIMARY_USER" >/dev/null 2>&1; then
+    if getent group docker >/dev/null 2>&1; then
+        info "Adding $PRIMARY_USER to docker group"
+        run "usermod -aG docker $PRIMARY_USER"
+    else
+        info "Creating docker group and adding $PRIMARY_USER"
+        run "groupadd docker || true"
+        run "usermod -aG docker $PRIMARY_USER"
+    fi
+fi
+
 info "Docker phase complete"
+# Run lightweight validation (non-fatal) to check docker readiness
+run "bash scripts/validate-docker-pihole.sh" || true

@@ -5,9 +5,17 @@ source ./config.env
 
 info "Starting Backup phase"
 
-# --- Validate backup disk ---
-if [ ! -b "$BACKUP_DISK" ]; then
-    error "Backup disk $BACKUP_DISK not found. Attach it before running this phase."
+# --- Determine backup disk if not explicitly configured ---
+if [ -z "${BACKUP_DISK-}" ]; then
+    info "No BACKUP_DISK set in config; attempting to auto-detect an external disk"
+    # pick first non-root, non-loop, non-mmcb disk
+    ROOT_SRC=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    BACKUP_DISK_CANDIDATE=$(lsblk -dpno NAME | grep -v "$ROOT_SRC" | grep -v loop | grep -v mmcblk | head -n1 || true)
+    if [ -z "$BACKUP_DISK_CANDIDATE" ]; then
+        error "No suitable backup disk auto-detected. Set BACKUP_DISK in config.env or attach a disk."
+    fi
+    BACKUP_DISK="$BACKUP_DISK_CANDIDATE"
+    info "Auto-detected backup disk: $BACKUP_DISK"
 fi
 
 # --- Mount backup disk if not mounted ---

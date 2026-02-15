@@ -19,6 +19,11 @@ if [ ! -d "$SHARED_DIR" ]; then
     run "mkdir -p $SHARED_DIR"
 fi
 
+# Ensure primary user exists
+if ! id -u "$PRIMARY_USER" >/dev/null 2>&1; then
+    error "Primary user $PRIMARY_USER not found. Create the user or set PRIMARY_USER in config.env"
+fi
+
 # Set ownership and permissions
 run "chown -R $PRIMARY_USER:$PRIMARY_USER $SHARED_DIR"
 run "chmod -R 2775 $SHARED_DIR"  # SGID ensures new files inherit group

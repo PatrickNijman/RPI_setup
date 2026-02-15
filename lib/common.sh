@@ -6,6 +6,9 @@ LOG_FILE="/var/log/pi-setup.log"
 DRY_RUN="${DRY_RUN:-false}"
 
 log() {
+    # ensure log directory exists before writing
+    mkdir -p "$(dirname "$LOG_FILE")"
+    touch "$LOG_FILE" 2>/dev/null || true
     echo "$(date '+%F %T') [$1] $2" | tee -a "$LOG_FILE"
 }
 
@@ -25,7 +28,8 @@ run() {
     if [ "$DRY_RUN" = "true" ]; then
         echo "[DRY-RUN] $*"
     else
-        eval "$@"
+        # use a login shell to evaluate complex commands safely
+        bash -lc "$*"
     fi
 }
 
@@ -35,4 +39,18 @@ validate_mount() {
 
 validate_config() {
     [ -f config.env ] || error "Missing config.env"
+
+    # load config for validation
+    source config.env
+
+    # required variables that phases expect
+    local missing=()
+    for v in TIMEZONE PRIMARY_USER BACKUP_MOUNT BACKUP_LABEL; do
+        if [ -z "${!v-}" ]; then
+            missing+=("$v")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing required config variables: ${missing[*]}"
+    fi
 }
