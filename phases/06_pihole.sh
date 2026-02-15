@@ -1,21 +1,72 @@
 #!/bin/bash
+set -Eeuo pipefail
 source lib/common.sh
+source ./config.env
 
-mkdir -p /opt/containers/pihole
-cd /opt/containers/pihole
+info "Starting Pi-hole phase"
 
-cat > docker-compose.yml <<EOF
-services:
-  pihole:
-    image: pihole/pihole:latest
-    network_mode: host
-    restart: unless-stopped
-    volumes:
-      - /srv/pihole:/etc/pihole
-    environment:
-      TZ: $PIHOLE_TZ
-EOF
+# Validate Docker
+if ! command_exists docker; then
+    error "Docker binary not found. Run Docker phase first."
+fi
 
-run "docker compose up -d"
+# Start Docker service if needed
+if ! systemctl is-active --quiet docker; then
+    info "Starting Docker service"
+    run "systemctl enable --now docker"
+fi
+
+# Docker named volumes
+PIHOLE_VOLUME="pihole_data"
+DNSMASQ_VOLUME="dnsmasq_data"
+
+# Create volumes if missing
+for VOL in $PIHOLE_VOLUME $DNSMASQ_VOLUME; do
+    if ! docker volume ls --format '{{.Name}}' | grep -q "^$VOL$"; then
+        info "Creating Docker volume: $VOL"
+        run "docker volume create $VOL"
+    fi
+done
+
+# Pull latest Pi-hole image
+info "Pulling latest Pi-hole image"
+run "docker pull pihole/pihole:latest"
+
+# Remove stopped container if exists
+if docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
+    STATUS=$(docker inspect -f '{{.State.Status}}' pihole)
+    if [ "$STATUS" != "running" ]; then
+        info "Removing stopped Pi-hole container"
+        run "docker rm pihole"
+    else
+        info "Pi-hole container already running"
+    fi
+fi
+
+# Start container if missing
+if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
+    info "Starting Pi-hole container"
+    run "docker run -d \
+        --name pihole \
+        --restart unless-stopped \
+        -p 53:53/tcp -p 53:53/udp \
+        -p 80:80 \
+        -v $PIHOLE_VOLUME:/etc/pihole \
+        -v $DNSMASQ_VOLUME:/etc/dnsmasq.d \
+        -e TZ=\"$TIMEZONE\" \
+        -e WEBPASSWORD=\"$PIHOLE_WEBPASSWORD\" \
+        pihole/pihole:latest"
+fi
+
+# Set web password (safe to rerun)
+info "Enforcing web password"
+run "docker exec -it pihole pihole -a setpassword '$PIHOLE_WEBPASSWORD' || true"
+
+# Verify setupVars.conf
+if docker exec -it pihole test -f /etc/pihole/setupVars.conf; then
+    info "Pi-hole setupVars.conf successfully created"
+else
+    warn "Pi-hole setupVars.conf not found; container may not have initialized yet"
+fi
 
 info "Pi-hole phase complete"

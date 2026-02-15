@@ -1,5 +1,7 @@
+  GNU nano 8.4                                       phases/08_immich.sh
 #!/bin/bash
 source lib/common.sh
+source ./config.env
 
 echo "=== SYSTEM HEALTH ==="
 uptime

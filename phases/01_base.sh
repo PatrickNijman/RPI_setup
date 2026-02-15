@@ -1,5 +1,9 @@
 #!/bin/bash
+set -Eeuo pipefail
 source lib/common.sh
+source ./config.env
+
+info "Starting Base phase"
 
 info "Updating system"
 run "apt update"
@@ -11,12 +15,12 @@ run "apt install -y vim curl htop rsync smartmontools ufw fail2ban unattended-up
 info "Setting timezone"
 run "timedatectl set-timezone $TIMEZONE"
 
-info "Creating directory structure"
+info "Creating general directory structure"
 run "mkdir -p /srv/samba/shared"
 run "mkdir -p /srv/immich/{library,postgres,cache}"
-run "mkdir -p /srv/pihole"
 run "mkdir -p /opt/containers"
 
+info "Setting ownership to primary user"
 run "chown -R $PRIMARY_USER:$PRIMARY_USER /srv /opt/containers"
 
 info "Base phase complete"

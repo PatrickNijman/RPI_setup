@@ -1,21 +1,33 @@
 #!/bin/bash
+set -Eeuo pipefail
 source lib/common.sh
+source ./config.env
+
+info "Starting Docker phase"
+
+OS=$(grep '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+ARCH=$(dpkg --print-architecture)
+info "Detected OS: $OS, ARCH: $ARCH"
 
 if ! command_exists docker; then
-    run "curl -fsSL https://get.docker.com | sh"
+    if [[ "$OS" == "raspbian" ]] || grep -qi "raspberry" /etc/os-release; then
+        info "Installing Docker from OS repo"
+        run "apt update"
+        run "apt install -y docker.io docker-compose-plugin"
+    else
+        info "Installing official Docker CE"
+        run "apt update"
+        run "apt install -y ca-certificates curl gnupg lsb-release"
+        run "install -m 0755 -d /etc/apt/keyrings"
+        run "curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc"
+        run "chmod a+r /etc/apt/keyrings/docker.asc"
+        run "echo \"deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(lsb_release -cs) stable\" > /etc/apt/sources.list.d/docker.list"
+        run "apt update"
+        run "apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+    fi
 fi
 
-run "usermod -aG docker $PRIMARY_USER"
-
-mkdir -p /etc/docker
-
-cat > /etc/docker/daemon.json <<EOF
-{
-"log-driver":"json-file",
-"log-opts":{"max-size":"10m","max-file":"3"}
-}
-EOF
-
-run "systemctl restart docker"
+info "Enabling Docker service"
+run "systemctl enable --now docker"
 
 info "Docker phase complete"

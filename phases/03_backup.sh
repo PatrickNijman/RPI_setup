@@ -1,44 +1,35 @@
 #!/bin/bash
-source lib/common.sh
-
-validate_mount
-
-info "Installing backup script"
-
-cat > /usr/local/bin/backup-mirror.sh <<EOF
-#!/bin/bash
 set -Eeuo pipefail
-docker ps -q | xargs -r docker stop
-rsync -aAX --delete \
---exclude={"/dev/*","/proc/*","/sys/*","/tmp/*","/run/*","$BACKUP_MOUNT/*","/lost+found"} \
-/ $BACKUP_MOUNT/ssd-mirror
-docker ps -aq | xargs -r docker start
-EOF
+source lib/common.sh
+source ./config.env
 
-chmod +x /usr/local/bin/backup-mirror.sh
+info "Starting Backup phase"
 
-cat > /etc/systemd/system/backup-mirror.timer <<EOF
-[Unit]
-Description=Nightly Backup
+# --- Validate backup disk ---
+if [ ! -b "$BACKUP_DISK" ]; then
+    error "Backup disk $BACKUP_DISK not found. Attach it before running this phase."
+fi
 
-[Timer]
-OnCalendar=$BACKUP_TIME
-Persistent=true
+# --- Mount backup disk if not mounted ---
+if ! mountpoint -q "$BACKUP_MOUNT"; then
+    info "Mounting backup disk $BACKUP_DISK to $BACKUP_MOUNT"
+    run "mkdir -p $BACKUP_MOUNT"
+    # Auto-format if empty filesystem (dangerous if user already has data!)
+    FS_TYPE=$(blkid -o value -s TYPE "$BACKUP_DISK" || echo "")
+    if [ -z "$FS_TYPE" ]; then
+        info "Backup disk unformatted, creating ext4 filesystem"
+        run "mkfs.ext4 -F $BACKUP_DISK"
+    fi
+    run "mount $BACKUP_DISK $BACKUP_MOUNT"
+fi
 
-[Install]
-WantedBy=timers.target
-EOF
+# --- Rsync mirror SSD to backup disk ---
+info "Starting incremental backup of SSD root to backup disk"
+# Exclude backup disk itself, /proc, /sys, /dev, /tmp
+EXCLUDES="--exclude=/proc --exclude=/sys --exclude=/dev --exclude=/tmp --exclude=$BACKUP_MOUNT"
+run "rsync -aAXv $EXCLUDES / $BACKUP_MOUNT/backup"
 
-cat > /etc/systemd/system/backup-mirror.service <<EOF
-[Unit]
-Description=SSD Mirror Backup
+# --- Optional: create timestamped snapshot (if space allows) ---
+# run "cp -al $BACKUP_MOUNT/backup $BACKUP_MOUNT/backup_$(date +%Y%m%d%H%M)"
 
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/backup-mirror.sh
-EOF
-
-run "systemctl daemon-reload"
-run "systemctl enable --now backup-mirror.timer"
-
-info "Backup phase complete"
+# --- Spin down HDD to preserve lifespan -
