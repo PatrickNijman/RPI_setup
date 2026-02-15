@@ -98,8 +98,10 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
     run "docker run -d \
         --name pihole \
         --restart unless-stopped \
-        -p 53:53/tcp -p 53:53/udp \
-        -p 80:80 \
+        -p 53:53/tcp \
+        -p 53:53/udp \
+        -p 80:80/tcp \
+        -p 443:443/tcp \
         -v $PIHOLE_VOLUME:/etc/pihole \
         -v $DNSMASQ_VOLUME:/etc/dnsmasq.d \
         -e TZ=\"$TIMEZONE\" \
