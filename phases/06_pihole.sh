@@ -59,37 +59,7 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
         run "systemctl disable --now dnsmasq.service"
     fi
 
-    # If any Docker container is (stopped or running) publishing port 53, stop and remove it
-    if command_exists docker; then
-        CONTAINERS=$(docker ps -a --format '{{.ID}} {{.Names}} {{.Ports}}' | grep -E ':53' | awk '{print $1}' || true)
-        if [ -n "${CONTAINERS}" ]; then
-            info "Found Docker containers publishing port 53: ${CONTAINERS}"
-            echo "The following containers publish port 53 and may conflict with Pi-hole:"
-            for c in ${CONTAINERS}; do
-                docker ps -a --filter "id=$c" --format ' - {{.ID}} {{.Names}} {{.Ports}}'
-            done
-            # Prompt before removing
-            if [ "${DRY_RUN:-false}" = "true" ]; then
-                info "DRY_RUN enabled — skipping stop/remove of conflicting containers"
-            else
-                read -r -p "Stop and remove these containers? [y/N]: " RESP
-                case "$RESP" in
-                    [yY]|[yY][eE][sS])
-                        for c in ${CONTAINERS}; do
-                            NAME=$(docker inspect -f '{{.Name}}' "$c" 2>/dev/null | sed 's:^/::' || echo "$c")
-                            info "Stopping container $NAME ($c)"
-                            run "docker stop $c || true"
-                            info "Removing container $NAME ($c)"
-                            run "docker rm $c || true"
-                        done
-                        ;;
-                    *)
-                        error "User declined to remove containers; port 53 conflict remains"
-                        ;;
-                esac
-            fi
-        fi
-    fi
+
 
     run "docker run -d \
         --name pihole \
