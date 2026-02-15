@@ -75,15 +75,29 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
         pihole/pihole:latest"
 fi
 
-# Set web password (safe to rerun)
-info "Enforcing web password"
-run "docker exec -it pihole pihole -a setpassword '$PIHOLE_WEBPASSWORD' || true"
+# Set web password (safe to rerun). Wait for container initialization first.
+info "Enforcing web password (will wait for container initialization)"
+initialized=false
+for i in {1..12}; do
+    if docker exec pihole test -f /etc/pihole/setupVars.conf >/dev/null 2>&1; then
+        initialized=true
+        break
+    fi
+    info "Waiting for Pi-hole to initialize ($i/12)..."
+    sleep 5
+done
 
-# Verify setupVars.conf
-if docker exec -it pihole test -f /etc/pihole/setupVars.conf; then
+if [ "$initialized" = true ]; then
+    info "Pi-hole initialized, setting web password"
+    # try common forms; avoid allocating a tty (-it) for non-interactive runs
+    if run "docker exec pihole pihole -a -p '$PIHOLE_WEBPASSWORD'"; then
+        info "Web password set via '-p' flag"
+    else
+        run "docker exec pihole pihole -a setpassword '$PIHOLE_WEBPASSWORD'" || warn "Failed to set Pi-hole web password non-interactively"
+    fi
     info "Pi-hole setupVars.conf successfully created"
 else
-    warn "Pi-hole setupVars.conf not found; container may not have initialized yet"
+    warn "Pi-hole setupVars.conf not found after waiting; container may still be initializing"
 fi
 
 info "Pi-hole phase complete"
