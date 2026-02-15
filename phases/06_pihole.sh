@@ -70,8 +70,8 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
         -p 443:443/tcp \
         -v $PIHOLE_VOLUME:/etc/pihole \
         -v $DNSMASQ_VOLUME:/etc/dnsmasq.d \
-        -e TZ=\"$TIMEZONE\" \
-        -e WEBPASSWORD=\"$PIHOLE_WEBPASSWORD\" \
+        -e TZ="$TIMEZONE" \
+        -e FTLCONF_webserver_api_password="$PIHOLE_WEBPASSWORD" \
         pihole/pihole:latest"
 fi
 
