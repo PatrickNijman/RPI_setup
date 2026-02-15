@@ -91,10 +91,6 @@ if ! docker ps -a --format '{{.Names}}' | grep -q '^pihole$'; then
         fi
     fi
 
-    if ss -lupn | grep -q ':53'; then
-        error "Port 53 still in use on the host; resolve conflict before starting Pi-hole"
-    fi
-
     run "docker run -d \
         --name pihole \
         --restart unless-stopped \
